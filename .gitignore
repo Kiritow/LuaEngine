@@ -1,0 +1,10 @@
+Debug/
+Release/
+dll/
+lib/
+.vs/
+*.dll
+*.cbp
+*.sln
+*.vcxproj
+*.vcxproj.*
