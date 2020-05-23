@@ -53,5 +53,9 @@ int window_new(lua_State* L)
 
 void InitWindow(lua_State* L)
 {
-	lua_register(L, "Window", window_new);
+	lua_getglobal(L, "package");
+	lua_getfield(L, -1, "loaded");
+	lua_pushcfunction(L, window_new);
+	lua_setfield(L, -2, "Window");
+	lua_pop(L, 2);
 }

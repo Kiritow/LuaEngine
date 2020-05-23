@@ -61,6 +61,21 @@ int music_load(lua_State* L)
 	return 1;
 }
 
+int music_loadmem(lua_State* L)
+{
+	size_t len;
+	const char* data = luaL_checklstring(L, 1, &len);
+	SDL_RWops* src = SDL_RWFromConstMem(data, len);
+	Mix_Music* music = Mix_LoadMUS_RW(src, 0);
+	SDL_RWclose(src);
+	if (!music)
+	{
+		return MixError(L, Mix_LoadMUS_RW);
+	}
+	put_media(L, music);
+	return 1;
+}
+
 int music_loadchunk(lua_State* L)
 {
 	const char* filename = luaL_checkstring(L, 1);
@@ -68,6 +83,21 @@ int music_loadchunk(lua_State* L)
 	if (!chunk)
 	{
 		return MixError(L, Mix_LoadWAV);
+	}
+	put_chunk(L, chunk);
+	return 1;
+}
+
+int music_loadchunkmem(lua_State* L)
+{
+	size_t len;
+	const char* data = luaL_checklstring(L, 1, &len);
+	SDL_RWops* src = SDL_RWFromConstMem(data, len);
+	Mix_Chunk* chunk = Mix_LoadWAV_RW(src, 0);
+	SDL_RWclose(src);
+	if (!chunk)
+	{
+		return MixError(L, Mix_LoadWAV_RW);
 	}
 	put_chunk(L, chunk);
 	return 1;
@@ -102,11 +132,16 @@ int music_resume(lua_State* L)
 
 void InitMusic(lua_State* L)
 {
+	lua_getglobal(L, "package");
+	lua_getfield(L, -1, "loaded");
 	lua_newtable(L);
 	lua_setfield_function(L, "load", music_load);
+	lua_setfield_function(L, "loadmem", music_loadmem);
 	lua_setfield_function(L, "loadChunk", music_loadchunk);
+	lua_setfield_function(L, "loadChunkmem", music_loadchunkmem);
 	lua_setfield_function(L, "play", music_play);
 	lua_setfield_function(L, "pause", music_pause);
 	lua_setfield_function(L, "resume", music_resume);
-	lua_setglobal(L, "Music");
+	lua_setfield(L, -2, "Music");
+	lua_pop(L, 2);
 }

@@ -7,14 +7,6 @@
 
 using namespace std;
 
-struct TCPSocket
-{
-	int fd;
-	bool nonblocking;
-	std::vector<char> data;
-	int buffsz;
-};
-
 int tcp_socket_dtor(lua_State* L)
 {
 	auto s = lua_checkblock<TCPSocket>(L, 1, "LuaEngineTCPSocket");
@@ -119,7 +111,7 @@ int tcp_socket_listen(lua_State* L)
 	const char* ip = NULL;
 	int port;
 	int backlog = 10;
-	if (lua_isstring(L, 2))
+	if (lua_type(L, 2) == LUA_TSTRING)
 	{
 		ip = luaL_checkstring(L, 2);
 		port = luaL_checkinteger(L, 3);
@@ -140,7 +132,7 @@ int tcp_socket_listen(lua_State* L)
 	sockaddr_in addr;
 	memset(&addr, 0, sizeof(addr));
 	addr.sin_family = AF_INET;
-	if (ip)
+	if (ip && strcmp(ip, "0.0.0.0"))
 	{
 		addr.sin_addr.s_addr = inet_addr(ip);
 	}
@@ -149,6 +141,8 @@ int tcp_socket_listen(lua_State* L)
 		addr.sin_addr.s_addr = INADDR_ANY;
 	}
 	addr.sin_port = htons(port);
+
+	printf("fd: %d ip: %s port: %d\n", s->fd, ip, port);
 
 	int ret = bind(s->fd, (const sockaddr*)&addr, sizeof(addr));
 	if (ret < 0)
@@ -283,7 +277,11 @@ int tcp_socket_new(lua_State* L)
 
 void InitTCPSocket(lua_State* L)
 {
-	lua_register(L, "TCPSocket", tcp_socket_new);
+	lua_getglobal(L, "package");
+	lua_getfield(L, -1, "loaded");
+	lua_pushcfunction(L, tcp_socket_new);
+	lua_setfield(L, -2, "TCPSocket");
+	lua_pop(L, 2);
 }
 
 #endif

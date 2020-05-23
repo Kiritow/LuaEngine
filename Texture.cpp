@@ -33,7 +33,7 @@ void put_texture(lua_State* L, SDL_Texture* text)
 	{
 		lua_setfield_function(L, "__gc", texture_close);
 		lua_newtable(L);
-		lua_setfield_function(L, "getsize", texture_getsize);
+		lua_setfield_function(L, "getSize", texture_getsize);
 		lua_setfield(L, -2, "__index");
 	}
 	lua_setmetatable(L, -2);

@@ -48,9 +48,53 @@ int font_rendertext(lua_State* L)
 			return TTFError(L, TTF_RenderText_Blended);
 		}
 		SDL_Texture* text = SDL_CreateTextureFromSurface(rnd, surf);
+		SDL_FreeSurface(surf);
 		if (!text)
 		{
-			SDL_FreeSurface(surf);
+			return SDLError(L, SDL_CreateTextureFromSurface);
+		}
+		put_texture(L, text);
+		return 1;
+	}
+}
+
+int font_renderutf8(lua_State* L)
+{
+	auto font = lua_checkpointer<TTF_Font>(L, 1, "LuaEngineFont");
+	const char* str;
+	SDL_Color color;
+	if (lua_isstring(L, 2))
+	{
+		str = luaL_checkstring(L, 2);
+		color.r = luaL_checkinteger(L, 3);
+		color.g = luaL_checkinteger(L, 4);
+		color.b = luaL_checkinteger(L, 5);
+		color.a = luaL_checkinteger(L, 6);
+		SDL_Surface* surf = TTF_RenderUTF8_Blended(font, str, color);
+		if (!surf)
+		{
+			return TTFError(L, TTF_RenderUTF8_Blended);
+		}
+		put_surface(L, surf);
+		return 1;
+	}
+	else
+	{
+		auto rnd = lua_checkpointer<SDL_Renderer>(L, 2, "LuaEngineRenderer");
+		str = luaL_checkstring(L, 3);
+		color.r = luaL_checkinteger(L, 4);
+		color.g = luaL_checkinteger(L, 5);
+		color.b = luaL_checkinteger(L, 6);
+		color.a = luaL_checkinteger(L, 7);
+		SDL_Surface* surf = TTF_RenderUTF8_Blended(font, str, color);
+		if (!surf)
+		{
+			return TTFError(L, TTF_RenderUTF8_Blended);
+		}
+		SDL_Texture* text = SDL_CreateTextureFromSurface(rnd, surf);
+		SDL_FreeSurface(surf);
+		if (!text)
+		{
 			return SDLError(L, SDL_CreateTextureFromSurface);
 		}
 		put_texture(L, text);
@@ -73,6 +117,7 @@ int font_new(lua_State* L)
 		lua_setfield_function(L, "__gc", font_close);
 		lua_newtable(L);
 		lua_setfield_function(L, "renderText", font_rendertext);
+		lua_setfield_function(L, "renderUTF8", font_renderutf8);
 		lua_setfield(L, -2, "__index");
 	}
 	lua_setmetatable(L, -2);
@@ -81,5 +126,9 @@ int font_new(lua_State* L)
 
 void InitFont(lua_State* L)
 {
-	lua_register(L, "Font", font_new);
+	lua_getglobal(L, "package");
+	lua_getfield(L, -1, "loaded");
+	lua_pushcfunction(L, font_new);
+	lua_setfield(L, -2, "Font");
+	lua_pop(L, 2);
 }

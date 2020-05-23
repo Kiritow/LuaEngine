@@ -3,8 +3,9 @@
 
 /*
 class TCPSocket
-	constructor(nonblocking: int)
+	constructor(nonblocking: boolean)
 	close()
+	setblocking(nonblocking: boolean)
 	listen([ip: string], port: int, [backlog: int])  Address default to 0.0.0.0, backlog default to 10.
 
 	# Blocking mode: All non-expected error will be raised as exception.
@@ -19,3 +20,12 @@ class TCPSocket
 	send(data: string)
 	recv([maxsize: int]): string
 */
+
+class TCPSocket
+{
+public:
+	int fd;
+	bool nonblocking;
+	std::vector<char> data;
+	int buffsz;
+};

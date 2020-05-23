@@ -45,6 +45,8 @@ void InitMusic(lua_State* L);
 void InitEvent(lua_State* L);
 void InitCommon(lua_State* L);
 void InitTCPSocket(lua_State* L);
+void InitThread(lua_State* L);
+void InitSocketSelector(lua_State* L);
 
 void PlatInit();
 

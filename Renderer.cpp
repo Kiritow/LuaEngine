@@ -30,6 +30,21 @@ int render_load(lua_State* L)
 	return 1;
 }
 
+int render_loadmem(lua_State* L)
+{
+	auto rnd = lua_checkpointer<SDL_Renderer>(L, 1, "LuaEngineRenderer");
+	size_t len;
+	const char* data = luaL_checklstring(L, 2, &len);
+	SDL_RWops* src = SDL_RWFromConstMem(data, len);
+	SDL_Texture* text = IMG_LoadTexture_RW(rnd, src, 0);
+	SDL_RWclose(src);
+	if (!text) {
+		return IMGError(L, IMG_LoadTexture_RW);
+	}
+	put_texture(L, text);
+	return 1;
+}
+
 int render_clear(lua_State* L)
 {
 	auto rnd = lua_checkpointer<SDL_Renderer>(L, 1, "LuaEngineRenderer");
@@ -141,6 +156,91 @@ int render_copyfullfill(lua_State* L)
 	return 0;
 }
 
+int render_drawpoint(lua_State* L)
+{
+	auto rnd = lua_checkpointer<SDL_Renderer>(L, 1, "LuaEngineRenderer");
+	int x = luaL_checkinteger(L, 2);
+	int y = luaL_checkinteger(L, 3);
+	if (SDL_RenderDrawPoint(rnd, x, y))
+	{
+		return SDLError(L, SDL_RenderDrawPoint);
+	}
+	return 0;
+}
+
+int render_drawline(lua_State* L)
+{
+	auto rnd = lua_checkpointer<SDL_Renderer>(L, 1, "LuaEngineRenderer");
+	int x1 = luaL_checkinteger(L, 2);
+	int y1 = luaL_checkinteger(L, 3);
+	int x2 = luaL_checkinteger(L, 4);
+	int y2 = luaL_checkinteger(L, 5);
+	if (SDL_RenderDrawLine(rnd, x1, y1, x2, y2) != 0)
+	{
+		return SDLError(L, SDL_RenderDrawLine);
+	}
+	return 0;
+}
+
+int render_drawrect(lua_State* L)
+{
+	auto rnd = lua_checkpointer<SDL_Renderer>(L, 1, "LuaEngineRenderer");
+	SDL_Rect r;
+	r.x = luaL_checkinteger(L, 2);
+	r.y = luaL_checkinteger(L, 3);
+	r.w = luaL_checkinteger(L, 4);
+	r.h = luaL_checkinteger(L, 5);
+	if (SDL_RenderDrawRect(rnd, &r) != 0)
+	{
+		return SDLError(L, SDL_RenderDrawRect);
+	}
+	return 0;
+}
+
+int render_fillrect(lua_State* L)
+{
+	auto rnd = lua_checkpointer<SDL_Renderer>(L, 1, "LuaEngineRenderer");
+	SDL_Rect r;
+	r.x = luaL_checkinteger(L, 2);
+	r.y = luaL_checkinteger(L, 3);
+	r.w = luaL_checkinteger(L, 4);
+	r.h = luaL_checkinteger(L, 5);
+	if (SDL_RenderFillRect(rnd, &r) != 0)
+	{
+		return SDLError(L, SDL_RenderFillRect);
+	}
+	return 0;
+}
+
+int render_setcolor(lua_State* L)
+{
+	auto rnd = lua_checkpointer<SDL_Renderer>(L, 1, "LuaEngineRenderer");
+	int r = luaL_checkinteger(L, 2);
+	int g = luaL_checkinteger(L, 3);
+	int b = luaL_checkinteger(L, 4);
+	int a = luaL_checkinteger(L, 5);
+	if (SDL_SetRenderDrawColor(rnd, r, g, b, a))
+	{
+		return SDLError(L, SDL_SetRenderDrawColor);
+	}
+	return 0;
+}
+
+int render_getcolor(lua_State* L)
+{
+	auto rnd = lua_checkpointer<SDL_Renderer>(L, 1, "LuaEngineRenderer");
+	uint8_t r, g, b, a;
+	if (SDL_GetRenderDrawColor(rnd, &r, &g, &b, &a))
+	{
+		return SDLError(L, SDL_GetRenderDrawColor);
+	}
+	lua_pushinteger(L, r);
+	lua_pushinteger(L, g);
+	lua_pushinteger(L, b);
+	lua_pushinteger(L, a);
+	return 4;
+}
+
 int render_new(lua_State* L)
 {
 	auto wnd = lua_checkpointer<SDL_Window>(L, 1, "LuaEngineWindow");
@@ -156,12 +256,19 @@ int render_new(lua_State* L)
 		lua_setfield_function(L, "__gc", render_close);
 		lua_newtable(L);
 		lua_setfield_function(L, "load", render_load);
+		lua_setfield_function(L, "loadmem", render_loadmem);
 		lua_setfield_function(L, "clear", render_clear);
 		lua_setfield_function(L, "update", render_update);
 		lua_setfield_function(L, "copy", render_copy);
 		lua_setfield_function(L, "copyTo", render_copyto);
 		lua_setfield_function(L, "copyFill", render_copyfill);
 		lua_setfield_function(L, "copyFullFill", render_copyfullfill);
+		lua_setfield_function(L, "drawPoint", render_drawpoint);
+		lua_setfield_function(L, "drawLine", render_drawline);
+		lua_setfield_function(L, "drawRect", render_drawrect);
+		lua_setfield_function(L, "fillRect", render_fillrect);
+		lua_setfield_function(L, "getColor", render_getcolor);
+		lua_setfield_function(L, "setColor", render_setcolor);
 		lua_setfield(L, -2, "__index");
 	}
 	lua_setmetatable(L, -2);
@@ -170,5 +277,9 @@ int render_new(lua_State* L)
 
 void InitRenderer(lua_State* L)
 {
-	lua_register(L, "Renderer", render_new);
+	lua_getglobal(L, "package");
+	lua_getfield(L, -1, "loaded");
+	lua_pushcfunction(L, render_new);
+	lua_setfield(L, -2, "Renderer");
+	lua_pop(L, 2);
 }

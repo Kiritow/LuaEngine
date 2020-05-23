@@ -28,7 +28,7 @@ int main()
 	lua_State* L = luaL_newstate();
 	luaL_openlibs(L);
 	InitLuaEngine(L);
-	string code = LoadFile("app.lua");
+	string code = LoadFile("game/app.lua");
 	if (luaL_loadstring(L, code.c_str()))
 	{
 		cout << lua_tostring(L, -1) << endl;

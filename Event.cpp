@@ -558,8 +558,11 @@ int event_poll(lua_State* L)
 
 void InitEvent(lua_State* L)
 {
+	lua_getglobal(L, "package");
+	lua_getfield(L, -1, "loaded");
 	lua_newtable(L);
 	lua_setfield_function(L, "wait", event_wait);
 	lua_setfield_function(L, "poll", event_poll);
-	lua_setglobal(L, "Event");
+	lua_setfield(L, -2, "Event");
+	lua_pop(L, 2);
 }

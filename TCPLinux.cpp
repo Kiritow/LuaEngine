@@ -13,14 +13,6 @@
 #include <fcntl.h>
 #include <sys/epoll.h>
 
-struct TCPSocket
-{
-	int fd;
-	bool nonblocking;
-	std::vector<char> data;
-	int buffsz;
-};
-
 int tcp_socket_dtor(lua_State* L)
 {
 	auto s = lua_checkblock<TCPSocket>(L, 1, "LuaEngineTCPSocket");
@@ -140,7 +132,7 @@ int tcp_socket_listen(lua_State* L)
 	sockaddr_in addr;
 	memset(&addr, 0, sizeof(addr));
 	addr.sin_family = AF_INET;
-	if (ip)
+	if (ip && strcmp(ip, "0.0.0.0"))
 	{
 		addr.sin_addr.s_addr = inet_addr(ip);
 	}
@@ -263,7 +255,11 @@ int tcp_socket_new(lua_State* L)
 
 void InitTCPSocket(lua_State* L)
 {
-	lua_register(L, "TCPSocket", tcp_socket_new);
+	lua_getglobal(L, "package");
+	lua_getfield(L, -1, "loaded");
+	lua_pushcfunction(L, tcp_socket_new);
+	lua_setfield(L, -2, "TCPSocket");
+	lua_pop(L, 2);
 }
 
 #endif  // end of ifndef _WIN32

@@ -1,4 +1,6 @@
 ﻿#include "include.h"
+#include <cstdlib>
+#include <ctime>
 
 void InitLuaEngine(lua_State* L)
 {
@@ -9,6 +11,8 @@ void InitLuaEngine(lua_State* L)
 	InitMusic(L);
 	InitCommon(L);
 	InitTCPSocket(L);
+	InitThread(L);
+	InitSocketSelector(L);
 }
 
 void InitEngine()
@@ -27,6 +31,7 @@ void InitEngine()
 	SDL_StopTextInput();
 
 	PlatInit();
+	srand(time(NULL));
 }
 
 void CloseEngine()
