@@ -1,6 +1,7 @@
 #include "LuaEngine.h"
 #include <string>
 #include <iostream>
+#include <direct.h>
 using namespace std;
 
 string LoadFile(const string& filename)
@@ -28,7 +29,8 @@ int main()
 	lua_State* L = luaL_newstate();
 	luaL_openlibs(L);
 	InitLuaEngine(L);
-	string code = LoadFile("game/app.lua");
+	_chdir("game");
+	string code = LoadFile("test.lua");
 	if (luaL_loadstring(L, code.c_str()))
 	{
 		cout << lua_tostring(L, -1) << endl;

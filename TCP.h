@@ -1,5 +1,4 @@
-#include "include.h"
-#include <vector>
+#include "Socket.h"
 
 /*
 class TCPSocket
@@ -8,7 +7,7 @@ class TCPSocket
 	setblocking(nonblocking: boolean)
 	listen([ip: string], port: int, [backlog: int])  Address default to 0.0.0.0, backlog default to 10.
 
-	# Blocking mode: All non-expected error will be raised as exception.
+	# Blocking mode: All unexpected error will be raised as exception.
 	connect(ip: string, port: int)
 	accept(): TCPSocket PeerIP PeerPort
 	send(data: string)  All data will be sent before return.
@@ -20,12 +19,3 @@ class TCPSocket
 	send(data: string)
 	recv([maxsize: int]): string
 */
-
-class TCPSocket
-{
-public:
-	int fd;
-	bool nonblocking;
-	std::vector<char> data;
-	int buffsz;
-};

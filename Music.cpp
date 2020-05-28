@@ -4,7 +4,8 @@
 module Music
 	load(filename: string): MusicMedia
 	loadChunk(filename: string): ChunkMedia
-	play(music: MusicMedia, [loops: int])
+	play(music: MusicMedia, [loops: int])  Loops default to 1 time
+	playChunk(chunk: ChunkMedia, channel: int, [loops: int])  Loops default to 1 time.
 	pause()
 	resume()
 */
@@ -106,7 +107,7 @@ int music_loadchunkmem(lua_State* L)
 int music_play(lua_State* L)
 {
 	auto music = lua_checkpointer<Mix_Music>(L, 1, "LuaEngineMusicMedia");
-	int loops = -1;
+	int loops = 0;
 	if (!lua_isnone(L, 2))
 	{
 		loops = luaL_checkinteger(L, 2);
@@ -116,6 +117,24 @@ int music_play(lua_State* L)
 		return MixError(L, Mix_PlayMusic);
 	}
 	return 0;
+}
+
+int music_playchunk(lua_State* L)
+{
+	auto chunk = lua_checkpointer<Mix_Chunk>(L, 1, "LuaEngineChunkMedia");
+	int channel = luaL_checkinteger(L, 2);
+	int loops = 0;
+	if (!lua_isnone(L, 3))
+	{
+		loops = luaL_checkinteger(L, 3);
+	}
+	int ret = Mix_PlayChannel(channel, chunk, loops);
+	if (ret == -1)
+	{
+		return MixError(L, Mix_PlayChannel);
+	}
+	lua_pushinteger(L, ret);
+	return 1;
 }
 
 int music_pause(lua_State* L)
@@ -140,6 +159,7 @@ void InitMusic(lua_State* L)
 	lua_setfield_function(L, "loadChunk", music_loadchunk);
 	lua_setfield_function(L, "loadChunkmem", music_loadchunkmem);
 	lua_setfield_function(L, "play", music_play);
+	lua_setfield_function(L, "playChunk", music_playchunk);
 	lua_setfield_function(L, "pause", music_pause);
 	lua_setfield_function(L, "resume", music_resume);
 	lua_setfield(L, -2, "Music");

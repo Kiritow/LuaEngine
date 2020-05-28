@@ -9,19 +9,19 @@ using namespace std;
 
 int tcp_socket_dtor(lua_State* L)
 {
-	auto s = lua_checkblock<TCPSocket>(L, 1, "LuaEngineTCPSocket");
+	auto s = lua_checkblock<SocketData>(L, 1, "LuaEngineTCPSocket");
 	if (s->fd > 0)
 	{
 		closesocket(s->fd);
 		s->fd = -1;
 	}
-	s->~TCPSocket();
+	s->~SocketData();
 	return 0;
 }
 
 int tcp_socket_close(lua_State* L)
 {
-	auto s = lua_checkblock<TCPSocket>(L, 1, "LuaEngineTCPSocket");
+	auto s = lua_checkblock<SocketData>(L, 1, "LuaEngineTCPSocket");
 	if (s->fd > 0)
 	{
 		closesocket(s->fd);
@@ -32,7 +32,7 @@ int tcp_socket_close(lua_State* L)
 
 int tcp_socket_send(lua_State* L)
 {
-	auto s = lua_checkblock<TCPSocket>(L, 1, "LuaEngineTCPSocket");
+	auto s = lua_checkblock<SocketData>(L, 1, "LuaEngineTCPSocket");
 	size_t sz;
 	const char* str = luaL_checklstring(L, 2, &sz);
 	size_t done = 0;
@@ -59,7 +59,7 @@ int tcp_socket_send(lua_State* L)
 
 int tcp_socket_recv(lua_State* L)
 {
-	auto s = lua_checkblock<TCPSocket>(L, 1, "LuaEngineTCPSocket");
+	auto s = lua_checkblock<SocketData>(L, 1, "LuaEngineTCPSocket");
 	int ret = recv(s->fd, s->data.data(), s->buffsz, 0);
 	if (ret < 0)
 	{
@@ -79,14 +79,19 @@ int tcp_socket_recv(lua_State* L)
 
 int tcp_socket_connect(lua_State* L)
 {
-	auto s = lua_checkblock<TCPSocket>(L, 1, "LuaEngineTCPSocket");
+	auto s = lua_checkblock<SocketData>(L, 1, "LuaEngineTCPSocket");
 	const char* ip = luaL_checkstring(L, 2);
 	int port = luaL_checkinteger(L, 3);
 
 	sockaddr_in addr;
 	memset(&addr, 0, sizeof(addr));
 	addr.sin_family = AF_INET;
-	addr.sin_addr.s_addr = inet_addr(ip);
+	if (inet_pton(AF_INET, ip, &addr.sin_addr) < 0)
+	{
+		int errcode = WSAGetLastError();
+		put_winerror(L, errcode, "inet_pton");
+		return lua_error(L);
+	}
 	addr.sin_port = htons(port);
 
 	int ret = connect(s->fd, (const sockaddr*)&addr, sizeof(addr));
@@ -107,7 +112,7 @@ int tcp_socket_connect(lua_State* L)
 
 int tcp_socket_listen(lua_State* L)
 {
-	auto s = lua_checkblock<TCPSocket>(L, 1, "LuaEngineTCPSocket");
+	auto s = lua_checkblock<SocketData>(L, 1, "LuaEngineTCPSocket");
 	const char* ip = NULL;
 	int port;
 	int backlog = 10;
@@ -134,7 +139,12 @@ int tcp_socket_listen(lua_State* L)
 	addr.sin_family = AF_INET;
 	if (ip && strcmp(ip, "0.0.0.0"))
 	{
-		addr.sin_addr.s_addr = inet_addr(ip);
+		if (inet_pton(AF_INET, ip, &addr.sin_addr) < 0)
+		{
+			int errcode = WSAGetLastError();
+			put_winerror(L, errcode, "inet_pton");
+			return lua_error(L);
+		}
 	}
 	else
 	{
@@ -163,7 +173,7 @@ int tcp_socket_listen(lua_State* L)
 
 int tcp_socket_setblocking(lua_State* L)
 {
-	auto s = lua_checkblock<TCPSocket>(L, 1, "LuaEngineTCPSocket");
+	auto s = lua_checkblock<SocketData>(L, 1, "LuaEngineTCPSocket");
 	luaL_checkany(L, 2);
 	bool blocking = lua_toboolean(L, 2);
 	if (blocking != s->nonblocking)
@@ -199,7 +209,7 @@ int tcp_socket_accept(lua_State* L);
 
 void put_tcp_socket(lua_State* L, int fd, bool nonblocking)
 {
-	auto s = new (lua_newblock<TCPSocket>(L)) TCPSocket;
+	auto s = new (lua_newblock<SocketData>(L)) SocketData;
 	if (luaL_newmetatable(L, "LuaEngineTCPSocket"))
 	{
 		lua_setfield_function(L, "__gc", tcp_socket_dtor);
@@ -222,7 +232,7 @@ void put_tcp_socket(lua_State* L, int fd, bool nonblocking)
 
 int tcp_socket_accept(lua_State* L)
 {
-	auto s = lua_checkblock<TCPSocket>(L, 1, "LuaEngineTCPSocket");
+	auto s = lua_checkblock<SocketData>(L, 1, "LuaEngineTCPSocket");
 	sockaddr_in addr;
 	int addrsz = sizeof(addr);
 	int ret = accept(s->fd, (sockaddr*)&addr, &addrsz);
@@ -237,7 +247,15 @@ int tcp_socket_accept(lua_State* L)
 		return lua_error(L);
 	}
 	put_tcp_socket(L, ret, false);
-	lua_pushstring(L, inet_ntoa(addr.sin_addr));
+
+	char buffer[1024] = { 0 };
+	if (inet_ntop(AF_INET, &addr.sin_addr, buffer, 1024) < 0)
+	{
+		int errcode = WSAGetLastError();
+		put_winerror(L, errcode, "inet_ntop");
+		return lua_error(L);
+	}
+	lua_pushstring(L, buffer);
 	lua_pushinteger(L, ntohs(addr.sin_port));
 	return 3;
 }

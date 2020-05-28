@@ -11,8 +11,10 @@ void InitLuaEngine(lua_State* L)
 	InitMusic(L);
 	InitCommon(L);
 	InitTCPSocket(L);
-	InitThread(L);
+	InitUDPSocket(L);
+	InitNetwork(L);
 	InitSocketSelector(L);
+	InitThread(L);
 }
 
 void InitEngine()
@@ -26,7 +28,7 @@ void InitEngine()
 		SDL_Log("Mix_OpenAudio: %s\n", Mix_GetError());
 		exit(2);
 	}
-	
+	Mix_AllocateChannels(16);
 	// Stop text input event
 	SDL_StopTextInput();
 

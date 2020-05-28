@@ -33,6 +33,12 @@ T* lua_checkblock(lua_State* L, int idx, const char* name)
 	return (T*)luaL_checkudata(L, idx, name);
 }
 
+template<typename T>
+T* lua_testblock(lua_State* L, int idx, const char* name)
+{
+	return (T*)luaL_testudata(L, idx, name);
+}
+
 // Shared Functions
 void put_surface(lua_State* L, SDL_Surface* surf);
 void put_texture(lua_State* L, SDL_Texture* text);
@@ -45,6 +51,8 @@ void InitMusic(lua_State* L);
 void InitEvent(lua_State* L);
 void InitCommon(lua_State* L);
 void InitTCPSocket(lua_State* L);
+void InitUDPSocket(lua_State* L);
+void InitNetwork(lua_State* L);
 void InitThread(lua_State* L);
 void InitSocketSelector(lua_State* L);
 
