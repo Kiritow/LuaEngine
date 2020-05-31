@@ -1,4 +1,5 @@
 #include "include.h"
+#include <SDL2/SDL2_gfxPrimitives.h>
 
 /*
 class Renderer
@@ -8,6 +9,15 @@ class Renderer
 	copyTo(text: Texture, x: int, y: int, [w: int, h: int])
 	copyFill(text: Texture, x: int, y: int, w: int, h: int)
 	copyFullFill(text: Texture)
+	drawPoint(x: int, y: int)
+	drawLine(x1: int, y1: int, x2: int, y2: int)
+	drawRect(x: int, y: int, w: int, h: int)
+	fillRect(x: int, y: int, w: int, h: int)
+	fillTriangle(x1: int, y1: int, x2: int, y2: int, x3: int, y3: int, [r: int, g: int, b:int, a: int])  #SDL2_gfx#
+	getColor(): r: int, g: int, b: int, a: int
+	setColor(r: int, g: int, b: int, a: int)
+	getBlendMode(): string
+	setBlendMode(mode: string)
 */
 
 int render_close(lua_State* L)
@@ -212,6 +222,128 @@ int render_fillrect(lua_State* L)
 	return 0;
 }
 
+int render_filltriangle(lua_State* L)
+{
+	auto rnd = lua_checkpointer<SDL_Renderer>(L, 1, "LuaEngineRenderer");
+
+	int x1 = luaL_checkinteger(L, 2);
+	int y1 = luaL_checkinteger(L, 3);
+	int x2 = luaL_checkinteger(L, 4);
+	int y2 = luaL_checkinteger(L, 5);
+	int x3 = luaL_checkinteger(L, 6);
+	int y3 = luaL_checkinteger(L, 7);
+
+	Uint8 r, g, b, a;
+	if (SDL_GetRenderDrawColor(rnd, &r, &g, &b, &a))
+	{
+		return SDLError(L, SDL_GetRenderDrawColor);
+	}
+	SDL_BlendMode mode;
+	if (SDL_GetRenderDrawBlendMode(rnd, &mode))
+	{
+		return SDLError(L, SDL_GetRenderDrawBlendMode);
+	}
+
+	Uint8 rr, gg, bb, aa;
+	rr = lua_isnone(L, 8) ? r : luaL_checkinteger(L, 8);
+	gg = lua_isnone(L, 9) ? g : luaL_checkinteger(L, 9);
+	bb = lua_isnone(L, 10) ? b : luaL_checkinteger(L, 10);
+	aa = lua_isnone(L, 11) ? a : luaL_checkinteger(L, 11);
+
+	int ret = filledTrigonRGBA(rnd, x1, y1, x2, y2, x3, y3, rr, gg, bb, aa);
+
+	if (SDL_SetRenderDrawBlendMode(rnd, mode))
+	{
+		return SDLError(L, SDL_SetRenderDrawBlendMode);
+	}
+	if (SDL_SetRenderDrawColor(rnd, r, g, b, a))
+	{
+		return SDLError(L, SDL_SetRenderDrawColor);
+	}
+
+	if(ret)
+	{
+		return SDLError(L, filledTrigonRGBA);
+	}
+
+	return 0;
+}
+
+int render_getblendmode(lua_State* L)
+{
+	auto rnd = lua_checkpointer<SDL_Renderer>(L, 1, "LuaEngineRenderer");
+	SDL_BlendMode mode;
+	if (SDL_GetRenderDrawBlendMode(rnd, &mode))
+	{
+		return SDLError(L, SDL_GetRenderDrawBlendMode);
+	}
+	switch (mode)
+	{
+	case SDL_BlendMode::SDL_BLENDMODE_ADD:
+		lua_pushstring(L, "add");
+		break;
+	case SDL_BlendMode::SDL_BLENDMODE_BLEND:
+		lua_pushstring(L, "blend");
+		break;
+	case SDL_BlendMode::SDL_BLENDMODE_INVALID:
+		lua_pushstring(L, "invalid");
+		break;
+	case SDL_BlendMode::SDL_BLENDMODE_MOD:
+		lua_pushstring(L, "mod");
+		break;
+	case SDL_BlendMode::SDL_BLENDMODE_MUL:
+		lua_pushstring(L, "mul");
+		break;
+	case SDL_BlendMode::SDL_BLENDMODE_NONE:
+		lua_pushstring(L, "none");
+		break;
+	default:
+		lua_pushstring(L, "unknown");
+		break;
+	}
+	return 1;
+}
+
+int render_setblendmode(lua_State* L)
+{
+	auto rnd = lua_checkpointer<SDL_Renderer>(L, 1, "LuaEngineRenderer");
+	const char* modestr = luaL_checkstring(L, 2);
+	SDL_BlendMode mode;
+	if (strcmp(modestr, "add") == 0)
+	{
+		mode = SDL_BlendMode::SDL_BLENDMODE_ADD;
+	}
+	else if (strcmp(modestr, "blend") == 0)
+	{
+		mode = SDL_BlendMode::SDL_BLENDMODE_BLEND;
+	}
+	else if (strcmp(modestr, "invalid") == 0)
+	{
+		mode = SDL_BlendMode::SDL_BLENDMODE_INVALID;
+	}
+	else if (strcmp(modestr, "mod") == 0)
+	{
+		mode = SDL_BlendMode::SDL_BLENDMODE_MOD;
+	}
+	else if (strcmp(modestr, "mul") == 0)
+	{
+		mode = SDL_BlendMode::SDL_BLENDMODE_MUL;
+	}
+	else if (strcmp(modestr, "none") == 0)
+	{
+		mode = SDL_BlendMode::SDL_BLENDMODE_NONE;
+	}
+	else
+	{
+		return 0;
+	}
+	if (SDL_SetRenderDrawBlendMode(rnd, mode))
+	{
+		return SDLError(L, SDL_SetRenderDrawBlendMode);
+	}
+	return 0;
+}
+
 int render_setcolor(lua_State* L)
 {
 	auto rnd = lua_checkpointer<SDL_Renderer>(L, 1, "LuaEngineRenderer");
@@ -267,8 +399,11 @@ int render_new(lua_State* L)
 		lua_setfield_function(L, "drawLine", render_drawline);
 		lua_setfield_function(L, "drawRect", render_drawrect);
 		lua_setfield_function(L, "fillRect", render_fillrect);
+		lua_setfield_function(L, "fillTriangle", render_filltriangle);
 		lua_setfield_function(L, "getColor", render_getcolor);
 		lua_setfield_function(L, "setColor", render_setcolor);
+		lua_setfield_function(L, "getBlendMode", render_getblendmode);
+		lua_setfield_function(L, "setBlendMode", render_setblendmode);
 		lua_setfield(L, -2, "__index");
 	}
 	lua_setmetatable(L, -2);

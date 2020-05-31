@@ -30,7 +30,7 @@ int main()
 	luaL_openlibs(L);
 	InitLuaEngine(L);
 	_chdir("game");
-	string code = LoadFile("test.lua");
+	string code = LoadFile("app.lua");
 	if (luaL_loadstring(L, code.c_str()))
 	{
 		cout << lua_tostring(L, -1) << endl;
