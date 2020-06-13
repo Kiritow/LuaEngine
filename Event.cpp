@@ -432,6 +432,38 @@ int unpack_event(lua_State* L, const SDL_Event& e)
 		lua_pushinteger(L, e.tfinger.timestamp);
 		return 9;
 	}
+	case SDL_DROPTEXT:
+	{
+		lua_pushstring(L, "droptext");
+		if (e.drop.file)
+		{
+			lua_pushstring(L, e.drop.file);
+			SDL_free(e.drop.file);
+			return 2;
+		}
+		return 1;
+	}
+	case SDL_DROPFILE:
+	{
+		lua_pushstring(L, "dropfile");
+		if (e.drop.file)
+		{
+			lua_pushstring(L, e.drop.file);
+			SDL_free(e.drop.file);
+			return 2;
+		}
+		return 1;
+	}
+	case SDL_DROPBEGIN:
+	{
+		lua_pushstring(L, "dropbegin");
+		return 1;
+	}
+	case SDL_DROPCOMPLETE:
+	{
+		lua_pushstring(L, "dropend");
+		return 1;
+	}
 	case SDL_WINDOWEVENT:
 	{
 		switch (e.window.event)
