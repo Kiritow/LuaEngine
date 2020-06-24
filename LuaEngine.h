@@ -11,5 +11,5 @@
 
 void InitEngine();
 void InitLuaEngine(lua_State* L);
-
+lua_State* CreateLuaEngine();
 void CloseEngine();

@@ -8,7 +8,7 @@ string LoadFile(const string& filename)
 {
 	string temp;
 	int ret;
-	char buff[1024];
+	char buff[1024] = { 0 };
 	SDL_RWops* io = SDL_RWFromFile(filename.c_str(), "rb");
 	if (!io)
 	{
@@ -18,6 +18,7 @@ string LoadFile(const string& filename)
 	while ((ret=SDL_RWread(io, buff, 1, 1024)))
 	{
 		temp.append(buff, ret);
+		memset(buff, 0, 1024);
 	}
 	SDL_RWclose(io);
 	return temp;
@@ -31,15 +32,19 @@ int main()
 	InitLuaEngine(L);
 	_chdir("game");
 	string code = LoadFile("app.lua");
-	if (luaL_loadstring(L, code.c_str()))
+	if (luaL_loadbufferx(L, code.c_str(), code.size(), "ProgramMain", "t"))
 	{
-		cout << lua_tostring(L, -1) << endl;
-		SDL_Log("[LuaAppSyntaxError] %s\n", lua_tostring(L, -1));
+		size_t errlen;
+		const char* err = lua_tolstring(L, -1, &errlen);
+		string errmsg(err, errlen);
+		SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "[LuaAppSyntaxError] %s", errmsg.c_str());
 	}
 	else if(lua_pcall(L, 0, LUA_MULTRET, 0))
 	{
-		cout << lua_tostring(L, -1) << endl;
-		SDL_Log("[LuaAppRuntimeError] %s\n", lua_tostring(L, -1));
+		size_t errlen;
+		const char* err = lua_tolstring(L, -1, &errlen);
+		string errmsg(err, errlen);
+		SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "[LuaAppRuntimeError] %s", errmsg.c_str());
 	}
 	lua_close(L);
 	CloseEngine();

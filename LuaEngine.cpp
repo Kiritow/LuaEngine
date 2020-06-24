@@ -15,6 +15,15 @@ void InitLuaEngine(lua_State* L)
 	InitNetwork(L);
 	InitSocketSelector(L);
 	InitThread(L);
+	InitChannel(L);
+}
+
+lua_State* CreateLuaEngine()
+{
+	lua_State* L = luaL_newstate();
+	luaL_openlibs(L);
+	InitLuaEngine(L);
+	return L;
 }
 
 void InitEngine()

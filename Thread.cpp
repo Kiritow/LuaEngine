@@ -1,271 +1,175 @@
 #include "include.h"
 #include <thread>
-#include <mutex>
-#include <condition_variable>
-#include <memory>
+#include <queue>
+#include <atomic>
 using namespace std;
 
-class SubLuaVM
+class LuaThread
 {
+private:
+	void _WorkerEntry()
+	{
+		status = 1;
+		if (lua_pcall(L, nArgs, LUA_MULTRET, 0))
+		{
+			status = 3;
+		}
+		else
+		{
+			status = 2;
+		}
+	}
 public:
 	lua_State* L;
-	unique_ptr<thread> td;
-	mutex mLock;
-	condition_variable cond;
-	string inBuffer;
-	string outBuffer;
-	int status;  // -1 Not started 0 Running 1 Exited 2 Exited with exception
+	int nArgs;
+	// 0 Not started 1 Running 2 Finished 3 Errored
+	atomic<int> status;
+	thread td;
 
-	SubLuaVM()
+	LuaThread(lua_State* subLVM, int subArgs) : L(subLVM), nArgs(subArgs), status(0), td(&LuaThread::_WorkerEntry, this)
 	{
-		status = -1;
-		L = luaL_newstate();
-		luaL_openlibs(L);
-		InitTCPSocket(L);
+
 	}
 
-	~SubLuaVM()
+	~LuaThread()
 	{
-		if (td && td->joinable()) td->join();
-		if(L) lua_close(L);
+		if (td.joinable())
+		{
+			td.join();
+		}
+		lua_close(L);
 	}
 };
 
-static void SubLuaVMEntry(SubLuaVM* vm)
-{
-	{
-		unique_lock<mutex> ulk(vm->mLock);
-		if (luaL_loadstring(vm->L, vm->inBuffer.c_str()))
-		{
-			vm->outBuffer = lua_tostring(vm->L, -1);
-			vm->status = 2;
-			vm->cond.notify_all();
-			return;
-		}
-		vm->inBuffer.clear();
-	}
-
-	if(lua_pcall(vm->L, 0, LUA_MULTRET, 0))
-	{
-		unique_lock<mutex> ulk(vm->mLock);
-		vm->outBuffer = lua_tostring(vm->L, -1);
-		vm->status = 2;
-		vm->cond.notify_all();
-		return;
-	}
-	else
-	{
-		vm->status = 1;
-		vm->cond.notify_all();
-	}
-}
-
 int thread_dtor(lua_State* L)
 {
-	auto vm = lua_checkblock<SubLuaVM>(L, 1, "LuaEngineThread");
-	vm->~SubLuaVM();
+	auto t = lua_checkblock<LuaThread>(L, 1, "LuaThread");
+	t->~LuaThread();
 	return 0;
 }
 
-int thread_put(lua_State* L)
+int thread_wait(lua_State* L)
 {
-	auto vm = lua_checkblock<SubLuaVM>(L, 1, "LuaEngineThread");
-	size_t datasz;
-	const char* rawdata = luaL_checklstring(L, 2, &datasz);
-	string data(rawdata, datasz);
-
-	int timeout_ms = -1;
-	if (!lua_isnone(L, 3))
+	auto t = lua_checkblock<LuaThread>(L, 1, "LuaThread");
+	if (t->td.joinable())
 	{
-		timeout_ms = luaL_checkinteger(L, 3);
-	}
-	if (timeout_ms >= 0)
-	{
-		unique_lock<mutex> ulk(vm->mLock);
-		while (!vm->inBuffer.empty())
-		{
-			auto ret = vm->cond.wait_for(ulk, chrono::milliseconds(timeout_ms));
-			if (ret == cv_status::timeout)
-			{
-				lua_pushboolean(L, false);
-				return 1;
-			}
-			else continue;
-		}
-		vm->inBuffer = data;
-		lua_pushboolean(L, true);
-		return 1;
+		t->td.join();
+		lua_pushboolean(L, 1);
 	}
 	else
 	{
-		unique_lock<mutex> ulk(vm->mLock);
-		while (!vm->inBuffer.empty())
-		{
-			vm->cond.wait(ulk);
-		}
-		vm->inBuffer = data;
-		return 0;
+		lua_pushboolean(L, 0);
 	}
+	return 1;
 }
 
 int thread_get(lua_State* L)
 {
-	auto vm = lua_checkblock<SubLuaVM>(L, 1, "LuaEngineThread");
-	int timeout_ms = -1;
-	if (!lua_isnone(L, 2))
+	auto t = lua_checkblock<LuaThread>(L, 1, "LuaThread");
+	if (t->td.joinable())
 	{
-		timeout_ms = luaL_checkinteger(L, 2);
+		t->td.join();
 	}
-	if (timeout_ms >= 0)
+
+	if (t->status == 2)
 	{
-		unique_lock<mutex> ulk(vm->mLock);
-		while (vm->outBuffer.empty())
-		{
-			auto ret = vm->cond.wait_for(ulk, chrono::milliseconds(timeout_ms));
-			if (ret == cv_status::timeout)
-			{
-				lua_pushboolean(L, false);
-				return 1;
-			}
-			else continue;
-		}
-		string temp = vm->outBuffer;
-		vm->outBuffer.clear();
-		lua_pushboolean(L, true);
-		lua_pushlstring(L, temp.data(), temp.size());
-		return 2;
+		lua_pushboolean(L, 1);
 	}
 	else
 	{
-		unique_lock<mutex> ulk(vm->mLock);
-		while (vm->outBuffer.empty())
-		{
-			vm->cond.wait(ulk);
-		}
-		string temp = vm->outBuffer;
-		vm->outBuffer.clear();
-		lua_pushlstring(L, temp.data(), temp.size());
-		return 1;
+		lua_pushboolean(L, 0);
 	}
+
+	int stackTop = lua_gettop(t->L);
+	for (int i = 1; i <= stackTop; i++)
+	{
+		switch (lua_type(t->L, i))
+		{
+		case LUA_TNIL:
+			lua_pushnil(L);
+			break;
+		case LUA_TNUMBER:
+			lua_pushnumber(L, lua_tonumber(t->L, i));
+			break;
+		case LUA_TBOOLEAN:
+			lua_pushboolean(L, lua_toboolean(t->L, i));
+			break;
+		case LUA_TSTRING:
+			lua_pushstring(L, lua_tostring(t->L, i));
+			break;
+		default:
+			return luaL_error(L, "thread_get: return value #%d has unsupported type: %s", i, lua_typename(t->L, lua_type(t->L, i)));
+		}
+	}
+
+	return stackTop + 1;
 }
 
-int thread_inner_get(lua_State* L)
+int thread_status(lua_State* L)
 {
-	auto vm = lua_checkpointer<SubLuaVM>(L, 1, "LuaEngineThreadWorker");
-	int timeout_ms = -1;
-	if (!lua_isnone(L, 2))
-	{
-		timeout_ms = luaL_checkinteger(L, 2);
-	}
-	if (timeout_ms >= 0)
-	{
-		unique_lock<mutex> ulk(vm->mLock);
-		while (vm->inBuffer.empty())
-		{
-			auto ret = vm->cond.wait_for(ulk, chrono::milliseconds(timeout_ms));
-			if (ret == cv_status::timeout)
-			{
-				lua_pushboolean(L, false);
-				return 1;
-			}
-			else continue;
-		}
-		string temp = vm->inBuffer;
-		vm->inBuffer.clear();
-		lua_pushboolean(L, true);
-		lua_pushlstring(L, temp.data(), temp.size());
-		return 2;
-	}
-	else
-	{
-		unique_lock<mutex> ulk(vm->mLock);
-		while (vm->inBuffer.empty())
-		{
-			vm->cond.wait(ulk);
-		}
-		string temp = vm->inBuffer;
-		vm->inBuffer.clear();
-		lua_pushlstring(L, temp.data(), temp.size());
-		return 1;
-	}
-}
-
-int thread_inner_put(lua_State* L)
-{
-	auto vm = lua_checkblock<SubLuaVM>(L, 1, "LuaEngineThreadWorker");
-	size_t datasz;
-	const char* rawdata = luaL_checklstring(L, 2, &datasz);
-	string data(rawdata, datasz);
-
-	int timeout_ms = -1;
-	if (!lua_isnone(L, 3))
-	{
-		timeout_ms = luaL_checkinteger(L, 3);
-	}
-	if (timeout_ms >= 0)
-	{
-		unique_lock<mutex> ulk(vm->mLock);
-		while (!vm->outBuffer.empty())
-		{
-			auto ret = vm->cond.wait_for(ulk, chrono::milliseconds(timeout_ms));
-			if (ret == cv_status::timeout)
-			{
-				lua_pushboolean(L, false);
-				return 1;
-			}
-			else continue;
-		}
-		vm->outBuffer = data;
-		lua_pushboolean(L, true);
-		return 1;
-	}
-	else
-	{
-		unique_lock<mutex> ulk(vm->mLock);
-		while (!vm->outBuffer.empty())
-		{
-			vm->cond.wait(ulk);
-		}
-		vm->outBuffer = data;
-		return 0;
-	}
+	auto t = lua_checkblock<LuaThread>(L, 1, "LuaThread");
+	lua_pushinteger(L, t->status);
+	return 1;
 }
 
 int thread_new(lua_State* L)
 {
-	size_t codesz;
-	const char* rawcode = luaL_checklstring(L, 1, &codesz);
-	string code(rawcode, codesz);
+	size_t codelen;
+	const char* code = luaL_checklstring(L, 1, &codelen);
+	
+	lua_State* subL = CreateLuaEngine();
+	
+	// compile
+	if (luaL_loadbuffer(subL, code, codelen, "ThreadMain"))
+	{
+		// Compile error, cannot load. Return error message to caller.
+		lua_pushnil(L);
+		lua_pushstring(L, lua_tostring(subL, 1));
+		lua_close(subL);
+		return 2;
+	}
 
-	// 在主端这一侧添加全部内容, 包扩gc.
-	auto vm = new (lua_newblock<SubLuaVM>(L)) SubLuaVM;
-	if (luaL_newmetatable(L, "LuaEngineThread"))
+	// push args
+	int stackTop = lua_gettop(L);
+	for (int idx = 2; idx <= stackTop; idx++)
+	{
+		switch (lua_type(L, idx))
+		{
+		case LUA_TNIL:
+			lua_pushnil(subL);
+			break;
+		case LUA_TNUMBER:
+			lua_pushnumber(subL, lua_tonumber(L, idx));
+			break;
+		case LUA_TBOOLEAN:
+			lua_pushboolean(subL, lua_toboolean(L, idx));
+			break;
+		case LUA_TSTRING:
+		{
+			size_t datalen;
+			const char* data = lua_tolstring(L, idx, &datalen);
+			lua_pushlstring(subL, data, datalen);
+			break;
+		}
+		default:
+			lua_pushnil(L);
+			lua_pushfstring(L, "thread_create: parameter #%d has unsupported type: %s", idx, lua_typename(L, lua_type(L, idx)));
+			lua_close(subL);
+			return 2;
+		}
+	}
+
+	auto c = new (lua_newblock<LuaThread>(L)) LuaThread(subL, stackTop - 1);
+	if (luaL_newmetatable(L, "LuaThread"))
 	{
 		lua_setfield_function(L, "__gc", thread_dtor);
 		lua_newtable(L);
+		lua_setfield_function(L, "wait", thread_wait);
 		lua_setfield_function(L, "get", thread_get);
-		lua_setfield_function(L, "put", thread_put);
+		lua_setfield_function(L, "status", thread_status);
 		lua_setfield(L, -2, "__index");
 	}
 	lua_setmetatable(L, -2);
-
-	// 在从端这一侧添加this_thread, 只有get和set.
-	lua_getglobal(vm->L, "package");
-	lua_getfield(vm->L, -1, "loaded");
-	lua_newpointer(vm->L, vm);
-	if (luaL_newmetatable(vm->L, "LuaEngineThreadWorker"))
-	{
-		lua_newtable(vm->L);
-		lua_setfield_function(vm->L, "get", thread_inner_get);
-		lua_setfield_function(vm->L, "put", thread_inner_put);
-		lua_setfield(vm->L, -2, "__index");
-	}
-	lua_setmetatable(vm->L, -2);
-	lua_setfield(vm->L, -2, "this_thread");
-	lua_pop(vm->L, 2);
-
-	vm->inBuffer = code;
-	vm->td.reset(new thread(SubLuaVMEntry, vm));
 	return 1;
 }
 

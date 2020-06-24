@@ -54,6 +54,7 @@ void InitTCPSocket(lua_State* L);
 void InitUDPSocket(lua_State* L);
 void InitNetwork(lua_State* L);
 void InitThread(lua_State* L);
+void InitChannel(lua_State* L);
 void InitSocketSelector(lua_State* L);
 
 void PlatInit();
