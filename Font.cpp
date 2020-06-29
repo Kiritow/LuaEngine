@@ -3,6 +3,7 @@
 /*
 class Font
 	constructor(filename: string, size: int)
+	constructor(data: string, size: int, flag: int) flag is not used currently.
 	renderText(str: string, r: int, g: int, b: int, a: int): Surface
 	renderText(rnd: Renderer, str: string, r: int, g: int, b: int, a: int): Texture
 */
@@ -104,13 +105,32 @@ int font_renderutf8(lua_State* L)
 
 int font_new(lua_State* L)
 {
-	const char* filename = luaL_checkstring(L, 1);
-	int fontsize = luaL_checkinteger(L, 2);
-	TTF_Font* font = TTF_OpenFont(filename, fontsize);
-	if (!font)
+	TTF_Font* font;
+	if (lua_gettop(L) >= 3)
 	{
-		return TTFError(L, TTF_OpenFont);
+		size_t datalen;
+		const char* data = luaL_checklstring(L, 1, &datalen);
+		int fontsize = luaL_checkinteger(L, 2);
+		int flag = luaL_checkinteger(L, 3);
+		SDL_RWops* src = SDL_RWFromConstMem(data, datalen);
+		font = TTF_OpenFontRW(src, 0, fontsize);
+		SDL_RWclose(src);
+		if (!font)
+		{
+			return TTFError(L, TTF_OpenFontRW);
+		}
 	}
+	else
+	{
+		const char* filename = luaL_checkstring(L, 1);
+		int fontsize = luaL_checkinteger(L, 2);
+		font = TTF_OpenFont(filename, fontsize);
+		if (!font)
+		{
+			return TTFError(L, TTF_OpenFont);
+		}
+	}
+
 	lua_newpointer(L, font);
 	if (luaL_newmetatable(L, "LuaEngineFont"))
 	{

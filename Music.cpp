@@ -3,11 +3,19 @@
 /*
 module Music
 	load(filename: string): MusicMedia
+	loadmem(data: string): MusicMedia
 	loadChunk(filename: string): ChunkMedia
+	loadChunkmem(data: string): ChunkMedia
 	play(music: MusicMedia, [loops: int])  Loops default to 1 time
 	playChunk(chunk: ChunkMedia, channel: int, [loops: int])  Loops default to 1 time.
+	fadeIn(music: MusicMedia, ms: int, [loops: int]) Loops default to 1.
+	fadeInPos(music: MusicMedia, ms: int, pos: number, [loops: int]) Loops default to 1.
+	fadeOut(ms: int)
 	pause()
 	resume()
+	rewind()
+	setPos(pos: number)
+	stop()
 */
 
 int media_close(lua_State* L)
@@ -119,6 +127,49 @@ int music_play(lua_State* L)
 	return 0;
 }
 
+int music_fadein(lua_State* L)
+{
+	auto music = lua_checkpointer<Mix_Music>(L, 1, "LuaEngineMusicMedia");
+	int ms = luaL_checkinteger(L, 2);
+	int loops = 0;
+	if (!lua_isnone(L, 3))
+	{
+		loops = luaL_checkinteger(L, 3);
+	}
+	if (Mix_FadeInMusic(music, loops, ms) != 0)
+	{
+		return MixError(L, Mix_FadeInMusic);
+	}
+	return 0;
+}
+
+int music_fadeinpos(lua_State* L)
+{
+	auto music = lua_checkpointer<Mix_Music>(L, 1, "LuaEngineMusicMedia");
+	int ms = luaL_checkinteger(L, 2);
+	double pos = luaL_checknumber(L, 3);
+	int loops = 0;
+	if (!lua_isnone(L, 4))
+	{
+		loops = luaL_checkinteger(L, 4);
+	}
+	if (Mix_FadeInMusicPos(music, loops, ms, pos) != 0)
+	{
+		return MixError(L, Mix_FadeInMusicPos);
+	}
+	return 0;
+}
+
+int music_fadeout(lua_State* L)
+{
+	int ms = luaL_checkinteger(L, 1);
+	if (Mix_FadeOutMusic(ms) != 0)
+	{
+		return MixError(L, Mix_FadeOutMusic);
+	}
+	return 0;
+}
+
 int music_playchunk(lua_State* L)
 {
 	auto chunk = lua_checkpointer<Mix_Chunk>(L, 1, "LuaEngineChunkMedia");
@@ -149,6 +200,28 @@ int music_resume(lua_State* L)
 	return 0;
 }
 
+int music_stop(lua_State* L)
+{
+	Mix_HaltMusic();
+	return 0;
+}
+
+int music_rewind(lua_State* L)
+{
+	Mix_RewindMusic();
+	return 0;
+}
+
+int music_setpos(lua_State* L)
+{
+	double pos = luaL_checknumber(L, 1);
+	if (Mix_SetMusicPosition(pos) != 0)
+	{
+		return MixError(L, Mix_SetMusicPosition);
+	}
+	return 0;
+}
+
 void InitMusic(lua_State* L)
 {
 	lua_getglobal(L, "package");
@@ -159,9 +232,14 @@ void InitMusic(lua_State* L)
 	lua_setfield_function(L, "loadChunk", music_loadchunk);
 	lua_setfield_function(L, "loadChunkmem", music_loadchunkmem);
 	lua_setfield_function(L, "play", music_play);
+	lua_setfield_function(L, "fadeIn", music_fadein);
+	lua_setfield_function(L, "fadeInPos", music_fadeinpos);
 	lua_setfield_function(L, "playChunk", music_playchunk);
+	lua_setfield_function(L, "fadeOut", music_fadeout);
 	lua_setfield_function(L, "pause", music_pause);
 	lua_setfield_function(L, "resume", music_resume);
+	lua_setfield_function(L, "stop", music_stop);
+	lua_setfield_function(L, "setPos", music_setpos);
 	lua_setfield(L, -2, "Music");
 	lua_pop(L, 2);
 }

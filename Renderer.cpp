@@ -5,9 +5,14 @@
 class Renderer
 	constructor(wnd: Window)
 	load(filename: string): Texture
+	loadmem(data: string): Texture
+	render(surf: Surface): Texture
+	setTarget(text: Texture)
+	clear()
+	update()
 	copy(text: Texture, sx: int, sy: int, sw: int, sh: int, dx: int, dy: int, dw: int, dh: int)
-	copyTo(text: Texture, x: int, y: int, [w: int, h: int])
-	copyFill(text: Texture, x: int, y: int, w: int, h: int)
+	copyTo(text: Texture, dx: int, dy: int, [dw: int, dh: int])
+	copyFill(text: Texture, sx: int, sy: int, sw: int, sh: int)
 	copyFullFill(text: Texture)
 	drawPoint(x: int, y: int)
 	drawLine(x1: int, y1: int, x2: int, y2: int)
@@ -53,6 +58,41 @@ int render_loadmem(lua_State* L)
 	}
 	put_texture(L, text);
 	return 1;
+}
+
+int render_render(lua_State* L)
+{
+	auto rnd = lua_checkpointer<SDL_Renderer>(L, 1, "LuaEngineRenderer");
+	auto surf = lua_checkpointer<SDL_Surface>(L, 2, "LuaEngineSurface");
+	SDL_Texture* text = SDL_CreateTextureFromSurface(rnd, surf);
+	if (!text)
+	{
+		return SDLError(L, SDL_CreateTextureFromSurface);
+	}
+	put_texture(L, text);
+	return 1;
+}
+
+int render_settarget(lua_State* L)
+{
+	auto rnd = lua_checkpointer<SDL_Renderer>(L, 1, "LuaEngineRenderer");
+	if (lua_gettop(L) == 1)
+	{
+		if (SDL_SetRenderTarget(rnd, NULL) != 0)
+		{
+			return SDLError(L, SDL_SetRenderTarget);
+		}
+		return 0;
+	}
+	else
+	{
+		auto text = lua_checkpointer<SDL_Texture>(L, 2, "LuaEngineTexture");
+		if (SDL_SetRenderTarget(rnd, text) != 0)
+		{
+			return SDLError(L, SDL_SetRenderTarget);
+		}
+		return 0;
+	}
 }
 
 int render_clear(lua_State* L)
@@ -389,6 +429,8 @@ int render_new(lua_State* L)
 		lua_newtable(L);
 		lua_setfield_function(L, "load", render_load);
 		lua_setfield_function(L, "loadmem", render_loadmem);
+		lua_setfield_function(L, "render", render_render);
+		lua_setfield_function(L, "setTarget", render_settarget);
 		lua_setfield_function(L, "clear", render_clear);
 		lua_setfield_function(L, "update", render_update);
 		lua_setfield_function(L, "copy", render_copy);
