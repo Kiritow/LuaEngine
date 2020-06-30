@@ -27,9 +27,7 @@ string LoadFile(const string& filename)
 int main()
 {
 	InitEngine();
-	lua_State* L = luaL_newstate();
-	luaL_openlibs(L);
-	InitLuaEngine(L);
+	lua_State* L = CreateLuaEngine();
 	_chdir("game");
 	string code = LoadFile("app.lua");
 	if (luaL_loadbufferx(L, code.c_str(), code.size(), "ProgramMain", "t"))

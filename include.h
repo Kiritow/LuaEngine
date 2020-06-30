@@ -40,8 +40,9 @@ T* lua_testblock(lua_State* L, int idx, const char* name)
 }
 
 // Shared Functions
-void put_surface(lua_State* L, SDL_Surface* surf);
-void put_texture(lua_State* L, SDL_Texture* text);
+void put_surface(lua_State* L, SDL_Surface* surf);  // Surface
+void put_texture(lua_State* L, SDL_Texture* text);  // Texture
+const char* VirtualKeyToString(SDL_Keycode vkey);  // Event
 
 // Init Functions
 void InitWindow(lua_State* L);

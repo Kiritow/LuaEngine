@@ -10,10 +10,17 @@ class Renderer
 	setTarget(text: Texture)
 	clear()
 	update()
+
 	copy(text: Texture, sx: int, sy: int, sw: int, sh: int, dx: int, dy: int, dw: int, dh: int)
 	copyTo(text: Texture, dx: int, dy: int, [dw: int, dh: int])
 	copyFill(text: Texture, sx: int, sy: int, sw: int, sh: int)
 	copyFullFill(text: Texture)
+
+	copyEx(text: Texture, sx: int, sy: int, sw: int, sh: int, dx: int, dy: int, dw: int, dh: int, angle: number, flip: string, [cx: int, cy: int])
+	copyToEx(text: Texture, dx: int, dy: int, [dw: int, dh: int], angle: number, flip: string, [cx: int, cy: int])
+	copyFillEx(text: Texture, sx: int, sy: int, sw: int, sh: int, angle: number, flip: string, [cx: int, cy: int])
+	copyFullFillEx(text: Texture, angle: number, flip: string, [cx: int, cy: int])
+
 	drawPoint(x: int, y: int)
 	drawLine(x1: int, y1: int, x2: int, y2: int)
 	drawRect(x: int, y: int, w: int, h: int)
@@ -202,6 +209,216 @@ int render_copyfullfill(lua_State* L)
 	if (SDL_RenderCopy(rnd, text, NULL, NULL) != 0)
 	{
 		return SDLError(L, SDL_RenderCopy);
+	}
+	return 0;
+}
+
+static SDL_RendererFlip flip_string_to_enum(const char* str)
+{
+	int flag = SDL_FLIP_NONE;
+	if (strstr(str, "vert"))
+	{
+		flag |= SDL_FLIP_VERTICAL;
+	}
+	else if (strstr(str, "hori") == 0)
+	{
+		flag |= SDL_FLIP_HORIZONTAL;
+	}
+	return (SDL_RendererFlip)flag;
+}
+
+int render_copyex(lua_State* L)
+{
+	auto rnd = lua_checkpointer<SDL_Renderer>(L, 1, "LuaEngineRenderer");
+	auto text = lua_checkpointer<SDL_Texture>(L, 2, "LuaEngineTexture");
+	int sx = luaL_checkinteger(L, 3);
+	int sy = luaL_checkinteger(L, 4);
+	int sw = luaL_checkinteger(L, 5);
+	int sh = luaL_checkinteger(L, 6);
+	int dx = luaL_checkinteger(L, 7);
+	int dy = luaL_checkinteger(L, 8);
+	int dw = luaL_checkinteger(L, 9);
+	int dh = luaL_checkinteger(L, 10);
+	double angle = luaL_checknumber(L, 11);
+	const char* rawflip = luaL_checkstring(L, 12);
+	SDL_RendererFlip flip = flip_string_to_enum(rawflip);
+
+	SDL_Point* pCenter, center;
+	if (!lua_isnone(L, 13))
+	{
+		center.x = luaL_checkinteger(L, 13);
+		center.y = luaL_checkinteger(L, 14);
+		pCenter = &center;
+	}
+	else
+	{
+		pCenter = nullptr;
+	}
+
+	SDL_Rect src;
+	src.x = sx;
+	src.y = sy;
+	src.w = sw;
+	src.h = sh;
+	SDL_Rect dst;
+	dst.x = dx;
+	dst.y = dy;
+	dst.w = dw;
+	dst.h = dh;
+
+	if (SDL_RenderCopyEx(rnd, text, &src, &dst, angle, pCenter, flip) != 0)
+	{
+		return SDLError(L, SDL_RenderCopyEx);
+	}
+
+	return 0;
+}
+
+int render_copytoex(lua_State* L)
+{
+	auto rnd = lua_checkpointer<SDL_Renderer>(L, 1, "LuaEngineRenderer");
+	auto text = lua_checkpointer<SDL_Texture>(L, 2, "LuaEngineTexture");
+	int x = luaL_checkinteger(L, 3);
+	int y = luaL_checkinteger(L, 4);
+
+	int w, h;
+	if (SDL_QueryTexture(text, NULL, NULL, &w, &h) != 0)
+	{
+		return SDLError(L, SDL_QueryTexture);
+	}
+
+	double angle;
+	const char* rawflip;
+	SDL_Point* pCenter, center;
+
+	if (!lua_isnone(L, 6) && lua_type(L, 6) == LUA_TSTRING)
+	{
+		angle = luaL_checknumber(L, 5);
+		rawflip = luaL_checkstring(L, 6);
+
+		if (!lua_isnone(L, 7))
+		{
+			center.x = luaL_checkinteger(L, 7);
+			center.y = luaL_checkinteger(L, 8);
+			pCenter = &center;
+		}
+		else
+		{
+			pCenter = nullptr;
+		}
+	}
+	else if (!lua_isnone(L, 7) && lua_type(L, 7) == LUA_TSTRING)
+	{
+		w = luaL_checkinteger(L, 5);
+		angle = luaL_checknumber(L, 6);
+		rawflip = luaL_checkstring(L, 7);
+
+		if (!lua_isnone(L, 8))
+		{
+			center.x = luaL_checkinteger(L, 8);
+			center.y = luaL_checkinteger(L, 9);
+			pCenter = &center;
+		}
+		else
+		{
+			pCenter = nullptr;
+		}
+	}
+	else
+	{
+		w = luaL_checkinteger(L, 5);
+		h = luaL_checkinteger(L, 6);
+
+		angle = luaL_checknumber(L, 7);
+		rawflip = luaL_checkstring(L, 8);
+		if (!lua_isnone(L, 9))
+		{
+			center.x = luaL_checkinteger(L, 9);
+			center.y = luaL_checkinteger(L, 10);
+			pCenter = &center;
+		}
+		else
+		{
+			pCenter = nullptr;
+		}
+	}
+
+	SDL_RendererFlip flip = flip_string_to_enum(rawflip);
+
+	SDL_Rect r;
+	r.w = w;
+	r.h = h;
+	r.x = x;
+	r.y = y;
+
+	if (SDL_RenderCopyEx(rnd, text, NULL, &r, angle, pCenter, flip) != 0)
+	{
+		return SDLError(L, SDL_RenderCopyEx);
+	}
+
+	return 0;
+}
+
+int render_copyfillex(lua_State* L)
+{
+	auto rnd = lua_checkpointer<SDL_Renderer>(L, 1, "LuaEngineRenderer");
+	auto text = lua_checkpointer<SDL_Texture>(L, 2, "LuaEngineTexture");
+	int x = luaL_checkinteger(L, 3);
+	int y = luaL_checkinteger(L, 4);
+	int w = luaL_checkinteger(L, 5);
+	int h = luaL_checkinteger(L, 6);
+	double angle = luaL_checknumber(L, 7);
+	const char* rawflip = luaL_checkstring(L, 8);
+	SDL_RendererFlip flip = flip_string_to_enum(rawflip);
+
+	SDL_Point* pCenter, center;
+	if (!lua_isnone(L, 9))
+	{
+		center.x = luaL_checkinteger(L, 9);
+		center.y = luaL_checkinteger(L, 10);
+		pCenter = &center;
+	}
+	else
+	{
+		pCenter = nullptr;
+	}
+
+	SDL_Rect r;
+	r.w = w;
+	r.h = h;
+	r.x = x;
+	r.y = y;
+
+	if (SDL_RenderCopyEx(rnd, text, &r, NULL, angle, pCenter, flip) != 0)
+	{
+		return SDLError(L, SDL_RenderCopyEx);
+	}
+	return 0;
+}
+
+int render_copyfullfillex(lua_State* L)
+{
+	auto rnd = lua_checkpointer<SDL_Renderer>(L, 1, "LuaEngineRenderer");
+	auto text = lua_checkpointer<SDL_Texture>(L, 2, "LuaEngineTexture");
+	double angle = luaL_checknumber(L, 3);
+	const char* rawflip = luaL_checkstring(L, 4);
+	SDL_RendererFlip flip = flip_string_to_enum(rawflip);
+
+	SDL_Point* pCenter, center;
+	if (!lua_isnone(L, 5))
+	{
+		center.x = luaL_checkinteger(L, 5);
+		center.y = luaL_checkinteger(L, 6);
+		pCenter = &center;
+	}
+	else
+	{
+		pCenter = nullptr;
+	}
+
+	if (SDL_RenderCopyEx(rnd, text, NULL, NULL, angle, pCenter, flip) != 0)
+	{
+		return SDLError(L, SDL_RenderCopyEx);
 	}
 	return 0;
 }
@@ -437,6 +654,10 @@ int render_new(lua_State* L)
 		lua_setfield_function(L, "copyTo", render_copyto);
 		lua_setfield_function(L, "copyFill", render_copyfill);
 		lua_setfield_function(L, "copyFullFill", render_copyfullfill);
+		lua_setfield_function(L, "copyEx", render_copyex);
+		lua_setfield_function(L, "copyToEx", render_copytoex);
+		lua_setfield_function(L, "copyFillEx", render_copyfillex);
+		lua_setfield_function(L, "copyFullFillEx", render_copyfullfillex);
 		lua_setfield_function(L, "drawPoint", render_drawpoint);
 		lua_setfield_function(L, "drawLine", render_drawline);
 		lua_setfield_function(L, "drawRect", render_drawrect);
