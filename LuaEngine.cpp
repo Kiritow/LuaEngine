@@ -16,6 +16,7 @@ void InitLuaEngine(lua_State* L)
 	InitSocketSelector(L);
 	InitThread(L);
 	InitChannel(L);
+	InitSurface(L);
 }
 
 lua_State* CreateLuaEngine()

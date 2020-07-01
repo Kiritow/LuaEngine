@@ -5,31 +5,66 @@
 #include <queue>
 #include <atomic>
 #include <map>
+#include <variant>
 using namespace std;
 
 /**
 module Channel
 	create(name: string): Channel, isCreated: boolean
 	open(name: string): Channel or nil
+		Opening non-exist channels return nil.
 	collect()
 
 class Channel
-	put(value: nil, number, boolean, string)
-	get(): nil, number, boolean, string
+	ChannelDataTypes: nil, integer, number, boolean, string, SurfaceObject
 
-	try_put(value: nil, number, boolean, string, timeout_ms: int): isSuccess: boolean
-	try_get(timeout_ms: int): isSuccess: boolean, value: nil, number, boolean, string
+	put(value: ChannelDataTypes)
+	get(): ChannelDataTypes
+
+	try_put(value: ChannelDataTypes, timeout_ms: int): isSuccess: boolean
+	try_get(timeout_ms: int): isSuccess: boolean, value: ChannelDataTypes
+
 	wait([timeout_ms: int]): hasValue: boolean
 		Block until has value if no timeout specified. Return false on reaching timeout.
 		Negative timeout is regarded as 0.
 		Zero timeout means instant check-and-return.
 */
 
+template<typename ResourceType>
+static ShareableResource<ResourceType>* lua_tofullres(lua_State* L, int index)
+{
+	return (ShareableResource<ResourceType>*)lua_touserdata(L, index);
+}
+
+enum class ChannelDataType
+{
+	SUBTYPE_NONE = 0,
+	SUBTYPE_NIL,
+	SUBTYPE_INTEGER,
+	SUBTYPE_NUMBER,
+	SUBTYPE_STRING,
+	SUBTYPE_BOOLEAN,
+	SUBTYPE_ENGINE_SURFACE
+};
+
+struct ChannelPackage
+{
+public:
+	ChannelDataType subtype;  // LuaEngine specified types.
+	string subname; // LUA_TUSERDATA
+	variant<bool, lua_Integer, lua_Number, string, shared_ptr<SDL_Surface>> value;
+
+	ChannelPackage() : subtype(ChannelDataType::SUBTYPE_NONE)
+	{
+
+	}
+};
+
 class Channel
 {
 public:
 	int capacity;
-	queue<tuple<int, string>> bus;
+	queue<ChannelPackage> bus;
 	mutex m;
 	condition_variable cond;
 
@@ -52,56 +87,90 @@ int channel_dtor(lua_State* L)
 	return 0;
 }
 
-static bool push_to_lua(lua_State* L, int type, const string& value)
+static bool push_to_lua(lua_State* L, const ChannelPackage& pack)
 {
-	switch (type)
+	switch (pack.subtype)
 	{
-	case LUA_TNIL:
+	case ChannelDataType::SUBTYPE_NIL:
 		lua_pushnil(L);
 		return true;
-	case LUA_TNUMBER:
-		lua_stringtonumber(L, value.c_str());
+	case ChannelDataType::SUBTYPE_INTEGER:
+		lua_pushinteger(L, get<lua_Integer>(pack.value));
 		return true;
-	case LUA_TBOOLEAN:
-		lua_pushboolean(L, value.empty());
+	case ChannelDataType::SUBTYPE_NUMBER:
+		lua_pushnumber(L, get<lua_Number>(pack.value));
 		return true;
-	case LUA_TSTRING:
-		lua_pushlstring(L, value.data(), value.size());
+	case ChannelDataType::SUBTYPE_BOOLEAN:
+		lua_pushboolean(L, get<bool>(pack.value));
+		return true;
+	case ChannelDataType::SUBTYPE_STRING:
+		lua_pushlstring(L, get<string>(pack.value).data(), get<string>(pack.value).size());
+		return true;
+	case ChannelDataType::SUBTYPE_ENGINE_SURFACE:
+		put_surface(L, get<shared_ptr<SDL_Surface>>(pack.value));
 		return true;
 	default:
 		return false;
 	}
 }
 
-static bool get_from_lua(lua_State* L, int index, int& type, string& value)
+static bool get_from_lua(lua_State* L, int index, ChannelPackage& pack)
 {
-	type = lua_type(L, index);
+	int type = lua_type(L, index);
 	switch (type)
 	{
 	case LUA_TNIL:
-		value = string();
+		pack.subtype = ChannelDataType::SUBTYPE_NIL;
 		return true;
 	case LUA_TNUMBER:
-		value = lua_tostring(L, index);
-		return true;
-	case LUA_TBOOLEAN:
 	{
-		if (lua_toboolean(L, index))
+		int isnum;
+		lua_Integer val = lua_tointegerx(L, index, &isnum);
+		if (isnum)
 		{
-			value = "true";
+			pack.subtype = ChannelDataType::SUBTYPE_INTEGER;
+			pack.value = val;
 		}
 		else
 		{
-			value = string();
+			pack.subtype = ChannelDataType::SUBTYPE_NUMBER;
+			pack.value = lua_tonumber(L, index);
 		}
 		return true;
 	}
+	case LUA_TBOOLEAN:
+		pack.subtype = ChannelDataType::SUBTYPE_BOOLEAN;
+		pack.value = (bool)lua_toboolean(L, index);
+		return true;
 	case LUA_TSTRING:
 	{
 		size_t sz;
 		const char* p = lua_tolstring(L, index, &sz);
-		value = string(p, sz);
+		pack.subtype = ChannelDataType::SUBTYPE_STRING;
+		pack.value =  string(p, sz);
 		return true;
+	}
+	case LUA_TUSERDATA:
+	{
+		bool ok = false;
+		if (lua_getmetatable(L, index))
+		{
+			int mtype = lua_getfield(L, -1, "__name");
+			if (mtype == LUA_TSTRING)
+			{
+				const char* tname = lua_tostring(L, -1);
+				if (strcmp(tname, "LuaEngineSurface") == 0)
+				{
+					ok = true;
+					auto pres = lua_tofullres<SDL_Surface>(L, index);
+					pres->enable_share();
+					pack.subtype = ChannelDataType::SUBTYPE_ENGINE_SURFACE;
+					pack.value = pres->sp;
+				}
+			}
+			lua_pop(L, 2);  // getfield, metatable.
+		}
+		return ok;
 	}
 	default:
 		return false;
@@ -113,23 +182,24 @@ int channel_get(lua_State* L)
 {
 	auto c = lua_checkblock<LuaChannel>(L, 1, "LuaChannel");
 
-	int type;
-	string value;
+	ChannelPackage pack;
 
 	{
 		unique_lock<mutex> ulk(c->sp->m);
 		c->sp->cond.wait(ulk, [&]() { return !c->sp->bus.empty(); });
 		// Un-serialize from string to Lua object
 
-		tie(type, value) = c->sp->bus.front();
+		pack = c->sp->bus.front();
 		c->sp->bus.pop();
 		c->sp->cond.notify_all();
 	}
 
-	if (!push_to_lua(L, type, value))
+	if (!push_to_lua(L, pack))
 	{
-		return luaL_error(L, "channel_get: unsupported type %s", lua_typename(L, type));
+		SDL_Log("channel_get: invalid package get from channel. Returning none instead.\n");
+		return 0;
 	}
+
 	return 1;
 }
 
@@ -139,8 +209,7 @@ int channel_try_get(lua_State* L)
 	int ms = luaL_checkinteger(L, 2);
 
 	bool success;
-	int type;
-	string value;
+	ChannelPackage pack;
 
 	{
 		unique_lock<mutex> ulk(c->sp->m);
@@ -155,7 +224,7 @@ int channel_try_get(lua_State* L)
 
 		if (success)
 		{
-			tie(type, value) = c->sp->bus.front();
+			pack = c->sp->bus.front();
 			c->sp->bus.pop();
 			c->sp->cond.notify_all();
 		}
@@ -164,9 +233,10 @@ int channel_try_get(lua_State* L)
 	if (success)
 	{
 		lua_pushboolean(L, true);
-		if (!push_to_lua(L, type, value))
+		if (!push_to_lua(L, pack))
 		{
-			return luaL_error(L, "channel_try_get: unsupported type %s", lua_typename(L, type));
+			SDL_Log("channel_try_get: invalid package get from channel. Returning none instead.\n");
+			return 1;
 		}
 		return 2;
 	}
@@ -182,17 +252,16 @@ int channel_put(lua_State* L)
 {
 	auto c = lua_checkblock<LuaChannel>(L, 1, "LuaChannel");
 
-	int type;
-	string value;
-	if (!get_from_lua(L, 2, type, value))
+	ChannelPackage pack;
+	if (!get_from_lua(L, 2, pack))
 	{
-		return luaL_error(L, "channel_put: unsupported type %s", lua_typename(L, type));
+		return luaL_error(L, "channel_put: unsupported type %s", lua_typename(L, lua_type(L, 2)));
 	}
 
 	{
 		unique_lock<mutex> ulk(c->sp->m);
 		c->sp->cond.wait(ulk, [&]() { return (c->sp->capacity > 0 && c->sp->bus.size() < c->sp->capacity) || (c->sp->capacity == 0 && c->sp->bus.empty()); });
-		c->sp->bus.emplace(type, value);
+		c->sp->bus.push(pack);
 		c->sp->cond.notify_all();
 	}
 
@@ -205,11 +274,10 @@ int channel_try_put(lua_State* L)
 	int ms = luaL_checkinteger(L, 2);
 
 	bool success;
-	int type;
-	string value;
-	if (!get_from_lua(L, 3, type, value))
+	ChannelPackage pack;
+	if (!get_from_lua(L, 3, pack))
 	{
-		return luaL_error(L, "channel_try_put: unsupported type %s", lua_typename(L, type));
+		return luaL_error(L, "channel_try_put: unsupported type %s", lua_typename(L, lua_type(L, 3)));
 	}
 
 	{
@@ -225,7 +293,7 @@ int channel_try_put(lua_State* L)
 
 		if (success)
 		{
-			c->sp->bus.emplace(type, value);
+			c->sp->bus.push(pack);
 			c->sp->cond.notify_all();
 		}
 	}
