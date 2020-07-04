@@ -1,4 +1,5 @@
 #include "include.h"
+#include <cstring>
 
 /*
 Event

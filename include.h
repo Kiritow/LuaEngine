@@ -138,6 +138,9 @@ void PlatInit();
 #ifdef _WIN32
 void put_winerror(lua_State* L, int errcode, const char* hint);
 
+#else
+void put_linuxerror(lua_State* L, int errcode, const char* hint);
+
 #endif  // ifdef _WIN32
 
 int lua_errno(lua_State* L, const char* hint);

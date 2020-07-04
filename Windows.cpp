@@ -25,13 +25,6 @@ void put_winerror(lua_State* L, int errcode, const char* hint)
 	}
 }
 
-int lua_errno(lua_State* L, const char* hint)
-{
-	char buff[1024] = { 0 };
-	strerror_s(buff, errno);
-	return luaL_error(L, "%s: %s", hint, buff);
-}
-
 void PlatInit()
 {
 	WORD wd = MAKEWORD(2, 2);

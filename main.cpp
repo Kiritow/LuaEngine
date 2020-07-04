@@ -1,7 +1,15 @@
 #include "LuaEngine.h"
+#include <cstring>
 #include <string>
 #include <iostream>
-#include <direct.h>
+
+#ifdef _WIN32
+#include <direct.h>  // _chdir
+#define ChangeDir _chdir
+#else
+#include <unistd.h>
+#define ChangeDir chdir
+#endif
 using namespace std;
 
 string LoadFile(const string& filename)
@@ -28,7 +36,7 @@ int main()
 {
 	InitEngine();
 	lua_State* L = CreateLuaEngine();
-	_chdir("game");
+	ChangeDir("game");
 	string code = LoadFile("app.lua");
 	if (luaL_loadbufferx(L, code.c_str(), code.size(), "ProgramMain", "t"))
 	{

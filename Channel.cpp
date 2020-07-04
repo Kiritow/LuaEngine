@@ -1,4 +1,5 @@
 #include "include.h"
+#include <cstring>
 #include <mutex>
 #include <condition_variable>
 #include <memory>

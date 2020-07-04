@@ -1,5 +1,6 @@
 #include "include.h"
 #include <SDL2/SDL2_gfxPrimitives.h>
+#include <cstring>
 
 /*
 class Renderer
@@ -169,7 +170,7 @@ int render_copyto(lua_State* L)
 	{
 		h = luaL_checkinteger(L, 6);
 	}
-	
+
 	SDL_Rect r;
 	r.w = w;
 	r.h = h;
