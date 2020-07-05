@@ -1,59 +1,25 @@
-#include "TCP.h"
+#include "Socket.h"
 #include <cstring>
 
-#ifdef _WIN32
-#define _WIN32_WINNT 0x0A00  // Win10
-#include <winsock2.h>
-#include <ws2tcpip.h>
+/*
+class TCPSocket
+	constructor(nonblocking: boolean)
+	close()
+	setblocking(nonblocking: boolean)
+	listen([ip: string], port: int, [backlog: int])  Address default to 0.0.0.0, backlog default to 10.
 
-static int SetSocketBlocking(lua_State* L, int fd, bool blocking)
-{
-    u_long arg = blocking ? 0 : 1;
-    int ret = ioctlsocket(fd, FIONBIO, &arg);
-    if (ret)
-    {
-        int errcode = WSAGetLastError();
-        put_winerror(L, errcode, "ioctlsocket");
-        return lua_error(L);
-    }
-    return 0;
-}
+	# Blocking mode: All unexpected error will be raised as exception.
+	connect(ip: string, port: int)
+	accept(): TCPSocket PeerIP PeerPort
+	send(data: string)  All data will be sent before return.
+	recv([maxsize: int]): string.  Default to 4KB.
 
-#else
-#include <arpa/inet.h>
-#include <netinet/in.h>
-#include <netinet/tcp.h>
-#include <netdb.h>
-#include <errno.h>
-#include <sys/epoll.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <sys/epoll.h>
-
-static int SetSocketBlocking(lua_State* L, int fd, bool blocking)
-{
-    const int flags = fcntl(fd, F_GETFL, 0);
-    if( ((flags & O_NONBLOCK) && !blocking) || (!(flags & O_NONBLOCK) && blocking))
-    {
-        return 0;
-    }
-    int ret = fcntl(fd, F_SETFL, blocking ? flags & ~O_NONBLOCK : flags | O_NONBLOCK);
-    if (ret)
-    {
-        put_linuxerror(L, errno, "fcntl");
-        return lua_error(L);
-    }
-    return 0;
-}
-
-#define closesocket close
-#define WSAGetLastError() errno
-#define WSAEWOULDBLOCK EWOULDBLOCK
-#define put_winerror put_linuxerror
-
-#endif
+	# Non-blocking mode:
+	connect(ip: string, port: int)
+	accept(): (TCPSocket PeerIP PeerPort) or nil
+	send(data: string)
+	recv([maxsize: int]): string
+*/
 
 using namespace std;
 
